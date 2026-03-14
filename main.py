@@ -43,31 +43,38 @@ async def run_universal_spam(target: str, base_cmd: str, max_messages: int):
 async def run_sequence_spam(target: str, user_id: str, max_messages: int):
     global spam_control
     if spam_control["is_running"]: return
-    
     spam_control["is_running"], spam_control["stop_flag"] = True, False
-    
     try:
         if not client.is_connected(): await client.connect()
         for i in range(max_messages):
             if spam_control["stop_flag"]: break
-            
-            # Step 1: Send /trom {ID}
-            trom_cmd = f"/trom {user_id}"
-            await client.send_message(target, trom_cmd)
-            logger.info(f"Sent to {target}: {trom_cmd}")
-            
+            await client.send_message(target, f"/trom {user_id}")
             await asyncio.sleep(1.5)
-            
-            # Step 2: Send /mua mientu
-            mua_cmd = "/mua mientu"
-            await client.send_message(target, mua_cmd)
-            logger.info(f"Sent to {target}: {mua_cmd}")
-            
-            # Interval delay >= 5s per request
+            await client.send_message(target, "/mua mientu")
             if i < max_messages - 1:
-                await asyncio.sleep(random.uniform(5.0, 7.0))
+                await asyncio.sleep(random.uniform(5.0, 7.5))
     except Exception as e:
         logger.error(f"Error: {e}")
+    finally:
+        spam_control["is_running"] = False
+
+async def run_tx_sequence(target: str, amount: str, max_messages: int):
+    global spam_control
+    if spam_control["is_running"]: return
+    spam_control["is_running"], spam_control["stop_flag"] = True, False
+    try:
+        if not client.is_connected(): await client.connect()
+        for i in range(max_messages):
+            if spam_control["stop_flag"]: break
+            await client.send_message(target, f"/tx t {amount}")
+            logger.info(f"Sent to {target}: /tx t {amount}")
+            await asyncio.sleep(1.5)
+            await client.send_message(target, "/mua buatx")
+            logger.info(f"Sent to {target}: /mua buatx")
+            if i < max_messages - 1:
+                await asyncio.sleep(random.uniform(5.0, 7.5))
+    except Exception as e:
+        logger.error(f"Error in TX sequence: {e}")
     finally:
         spam_control["is_running"] = False
 
@@ -84,7 +91,13 @@ async def stop():
 async def trom_trigger(user_id: str, count: int):
     target_bot = "deptraikhongsoai_bot"
     asyncio.create_task(run_sequence_spam(target_bot, user_id, count))
-    return {"target": target_bot, "victim": user_id, "count": count, "status": "started"}
+    return {"status": "started", "mode": "trom_sequence", "victim": user_id}
+
+@app.get("/tx-t-{amount}/{count}")
+async def tx_trigger(amount: str, count: int):
+    target_bot = "deptraikhongsoai_bot"
+    asyncio.create_task(run_tx_sequence(target_bot, amount, count))
+    return {"status": "started", "mode": "tx_sequence", "amount": amount, "repeat": count}
 
 @app.get("/{bot_username}/{command}/{count}")
 async def dynamic_trigger(bot_username: str, command: str, count: int):
