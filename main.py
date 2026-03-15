@@ -22,48 +22,43 @@ client = TelegramClient(StringSession(SESSION_STR), API_ID, API_HASH)
 @client.on(events.NewMessage(chats='deptraikhongsoai_bot'))
 async def auto_revenge_handler(event):
     global spam_control
-    message_text = event.raw_text
-    
-    if "BỊ MÓC TÚI!" in message_text and "đã trộm" in message_text:
-        match = re.search(r'@(\w+)\s+đã trộm', message_text)
+    if "BỊ MÓC TÚI!" in event.raw_text and "đã trộm" in event.raw_text:
+        match = re.search(r'@(\w+)\s+đã trộm', event.raw_text)
         if match:
-            thief_username = f"@{match.group(1)}"
-            logger.warning(f"REVENGE MODE: {thief_username}")
+            thief = f"@{match.group(1)}"
+            logger.warning(f"REVENGE START: {thief}")
             
             spam_control["stop_flag"] = True
-            await asyncio.sleep(2) 
+            await asyncio.sleep(3) # Tăng thời gian đợi dừng hẳn
             
-            asyncio.create_task(run_sequence_spam("deptraikhongsoai_bot", thief_username, 100, mode="trom"))
+            asyncio.create_task(run_task("deptraikhongsoai_bot", thief, 100, "trom"))
 
-async def run_sequence_spam(target: str, identifier: str, max_messages: int, mode: str):
+async def run_task(target, data, count, mode):
     global spam_control
-    
     if spam_control["is_running"] and not spam_control["stop_flag"]:
         return
 
-    spam_control["is_running"] = True
-    spam_control["stop_flag"] = False
+    spam_control["is_running"], spam_control["stop_flag"] = True, False
     
     try:
-        if not client.is_connected():
-            await client.connect()
-            
-        for i in range(max_messages):
-            if spam_control["stop_flag"]:
-                break
+        if not client.is_connected(): await client.connect()
+        for i in range(count):
+            if spam_control["stop_flag"]: break
             
             if mode == "trom":
-                await client.send_message(target, f"/trom {identifier}")
-                await asyncio.sleep(1.5)
+                await client.send_message(target, f"/trom {data}")
+                await asyncio.sleep(2.5) # Tăng từ 1.5s lên 2.5s để tránh bot quét 2 tin nhắn gần nhau
                 await client.send_message(target, "/mua mientu")
             elif mode == "tx":
-                await client.send_message(target, f"/tx t {identifier}")
-                await asyncio.sleep(1.5)
+                await client.send_message(target, f"/tx t {data}")
+                await asyncio.sleep(2.5) # Tăng từ 1.5s lên 2.5s
                 await client.send_message(target, "/mua buatx")
+            else:
+                await client.send_message(target, data)
             
-            if i < max_messages - 1:
-                await asyncio.sleep(random.uniform(5.0, 7.5))
-                
+            # Nghỉ ngẫu nhiên từ 6.5s đến 9.5s (An toàn hơn mức 5s tối thiểu)
+            if i < count - 1:
+                await asyncio.sleep(random.uniform(6.5, 9.5))
     except Exception as e:
         logger.error(f"Error: {e}")
     finally:
@@ -77,23 +72,27 @@ async def health():
 @app.get("/stop")
 async def stop():
     spam_control["stop_flag"] = True
-    return {"status": "stopped"}
+    return {"status": "stopping"}
 
 @app.get("/trom-{user_id}/{count}")
-async def trom_trigger(user_id: str, count: int):
-    if spam_control["is_running"]:
-        return {"error": "busy"}
-    asyncio.create_task(run_sequence_spam("deptraikhongsoai_bot", user_id, count, mode="trom"))
-    return {"status": "started", "mode": "trom"}
+async def trom_api(user_id: str, count: int):
+    if spam_control["is_running"]: return {"status": "busy"}
+    asyncio.create_task(run_task("deptraikhongsoai_bot", user_id, count, "trom"))
+    return {"status": "started"}
 
 @app.get("/tx-t-{amount}/{count}")
-async def tx_trigger(amount: str, count: int):
-    if spam_control["is_running"]:
-        return {"error": "busy"}
-    asyncio.create_task(run_sequence_spam("deptraikhongsoai_bot", amount, count, mode="tx"))
-    return {"status": "started", "mode": "tx"}
+async def tx_api(amount: str, count: int):
+    if spam_control["is_running"]: return {"status": "busy"}
+    asyncio.create_task(run_task("deptraikhongsoai_bot", amount, count, "tx"))
+    return {"status": "started"}
+
+@app.get("/{bot}/{cmd}/{count}")
+async def any_api(bot: str, cmd: str, count: int):
+    if spam_control["is_running"]: return {"status": "busy"}
+    full_cmd = f"/{cmd.replace('-', ' ')}"
+    asyncio.create_task(run_task(bot, full_cmd, count, "any"))
+    return {"status": "started"}
 
 @app.on_event("startup")
 async def startup():
-    if API_ID and API_HASH and SESSION_STR:
-        await client.connect()
+    if API_ID and API_HASH and SESSION_STR: await client.connect()
