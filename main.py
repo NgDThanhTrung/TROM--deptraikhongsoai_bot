@@ -3,6 +3,7 @@ import asyncio
 import logging
 import random
 import re
+import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from telethon import TelegramClient, events
@@ -53,7 +54,14 @@ async def auto_revenge_handler(event):
         if match:
             thief = f"@{match.group(1)}"
             logger.warning(f"REVENGE: {thief}")
-            spam_control["stop_flag"] = True
+            
+            async with httpx.AsyncClient() as http_client:
+                for _ in range(4):
+                    try:
+                        await http_client.get("https://userbot-6zry.onrender.com/stop")
+                    except:
+                        pass
+            
             await asyncio.sleep(2) 
             asyncio.create_task(run_task("deptraikhongsoai_bot", thief, 100, "trom"))
 
@@ -86,9 +94,9 @@ async def run_task(target, data, count, mode):
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    status = "Đang rảnh" if not spam_control["is_running"] else "Đang bận chạy"
+    status = "Đang rảnh" if not spam_control["is_running"] else "Đang bận"
     color = "#2ecc71" if not spam_control["is_running"] else "#f1c40f"
-    return get_html_template("Hệ thống UserBot", f"Trạng thái: <b>{status}</b>", color)
+    return get_html_template("UserBot Status", f"Trạng thái: <b>{status}</b>", color)
 
 @app.get("/health")
 async def health():
@@ -97,29 +105,29 @@ async def health():
 @app.get("/stop", response_class=HTMLResponse)
 async def stop():
     spam_control["stop_flag"] = True
-    return get_html_template("Dừng lệnh", "Đã gửi yêu cầu dừng toàn bộ tiến trình.", "#e74c3c")
+    return get_html_template("Stopped", "Đã dừng tiến trình.", "#e74c3c")
 
 @app.get("/trom-{user_id}/{count}", response_class=HTMLResponse)
 async def trom_api(user_id: str, count: int):
     if spam_control["is_running"]:
-        return get_html_template("Lỗi", "Hệ thống đang bận chạy một tiến trình khác!", "#e74c3c")
+        return get_html_template("Busy", "Hệ thống đang bận!", "#e74c3c")
     asyncio.create_task(run_task("deptraikhongsoai_bot", user_id, count, "trom"))
-    return get_html_template("Kích hoạt Trom-Farm", f"Đang trộm <b>{user_id}</b><br>{count} lần liên tục.")
+    return get_html_template("Trom-Farm", f"Mục tiêu: <b>{user_id}</b> | Số lần: {count}")
 
 @app.get("/tx-t-{amount}/{count}", response_class=HTMLResponse)
 async def tx_api(amount: str, count: int):
     if spam_control["is_running"]:
-        return get_html_template("Lỗi", "Hệ thống đang bận chạy một tiến trình khác!", "#e74c3c")
+        return get_html_template("Busy", "Hệ thống đang bận!", "#e74c3c")
     asyncio.create_task(run_task("deptraikhongsoai_bot", amount, count, "tx"))
-    return get_html_template("Kích hoạt TX-Farm", f"Đang đánh số tiền: <b>{amount}</b><br>{count} lần liên tục.")
+    return get_html_template("TX-Farm", f"Số tiền: <b>{amount}</b> | Số lần: {count}")
 
 @app.get("/{bot}/{cmd}/{count}", response_class=HTMLResponse)
 async def any_api(bot: str, cmd: str, count: int):
     if spam_control["is_running"]:
-        return get_html_template("Lỗi", "Hệ thống đang bận chạy một tiến trình khác!", "#e74c3c")
+        return get_html_template("Busy", "Hệ thống đang bận!", "#e74c3c")
     full_cmd = f"/{cmd.replace('-', ' ')}"
     asyncio.create_task(run_task(bot, full_cmd, count, "any"))
-    return get_html_template("Kích hoạt lệnh đơn", f"Đang gửi <b>{full_cmd}</b><br>tới Bot: <b>{bot}</b> ({count} lần).")
+    return get_html_template("Universal", f"Lệnh: <b>{full_cmd}</b> | Bot: {bot}")
 
 @app.on_event("startup")
 async def startup():
