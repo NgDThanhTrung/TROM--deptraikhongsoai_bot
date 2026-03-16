@@ -22,19 +22,20 @@ SESSION_STR = os.environ.get("SESSION_STR", "")
 # FILE LƯU TRỮ DỮ LIỆU
 DATA_FILE = "bot_data.json"
 
-# Hàm lưu dữ liệu vào file
+# Biến toàn cục
+thief_stats = {}
+pending_tasks = []
+spam_control = {"is_running": False, "stop_flag": False, "current_task": "Đang rảnh"}
+
+# Hàm lưu/tải dữ liệu
 def save_data_to_disk():
     try:
-        data = {
-            "thief_stats": thief_stats,
-            "pending_tasks": pending_tasks
-        }
+        data = {"thief_stats": thief_stats, "pending_tasks": pending_tasks}
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
     except Exception as e:
-        logger.error(f"Lỗi khi lưu file: {e}")
+        logger.error(f"Lỗi lưu file: {e}")
 
-# Hàm tải dữ liệu từ file
 def load_data_from_disk():
     global thief_stats, pending_tasks
     if os.path.exists(DATA_FILE):
@@ -43,19 +44,16 @@ def load_data_from_disk():
                 data = json.load(f)
                 thief_stats = data.get("thief_stats", {})
                 pending_tasks = data.get("pending_tasks", [])
-                logger.info("Đã khôi phục dữ liệu từ bộ nhớ tạm!")
+                logger.info("Đã khôi phục dữ liệu!")
         except Exception as e:
-            logger.error(f"Lỗi khi đọc file: {e}")
+            logger.error(f"Lỗi đọc file: {e}")
 
-# Khởi tạo biến
-thief_stats = {}
-pending_tasks = []
-load_data_from_disk() # Gọi hàm tải lại dữ liệu ngay khi chạy code
+# Tải dữ liệu cũ ngay khi khởi động
+load_data_from_disk()
 
-spam_control = {"is_running": False, "stop_flag": False, "current_task": "Đang rảnh"}
 client = TelegramClient(StringSession(SESSION_STR), API_ID, API_HASH)
 
-# --- GIỮ NGUYÊN CÁC HÀM get_html_template VÀ render_queue_list NHƯ CŨ ---
+# --- GIAO DIỆN DASHBOARD ---
 def get_html_template(title, content):
     total_stolen = sum(thief_stats.values())
     queue_size = len(pending_tasks)
@@ -111,7 +109,7 @@ def get_html_template(title, content):
 def render_queue_list():
     if not pending_tasks: return "<p class='text-xs text-gray-400 italic ml-2'>Trống...</p>"
     items = ""
-    for idx, task in enumerate(pending_tasks):
+    for idx, task in enumerate(pending_tasks[:10]): # Chỉ hiện 10 lệnh đầu để tránh lag
         is_active = (idx == 0 and spam_control["is_running"])
         active_class = "active" if is_active else ""
         rem = task.get('remaining', task['count'])
@@ -134,7 +132,7 @@ async def monitor_thieves_handler(event):
         if match:
             thief = f"@{match.group(1)}"
             thief_stats[thief] = thief_stats.get(thief, 0) + 1
-            save_data_to_disk() # Lưu lại khi có thay đổi thống kê
+            save_data_to_disk()
 
 async def worker():
     global spam_control, pending_tasks
@@ -153,7 +151,7 @@ async def worker():
             for i in range(task['count']):
                 if spam_control["stop_flag"]: break
                 task['remaining'] = task['count'] - i
-                save_data_to_disk() # Cập nhật tiến độ vào file
+                save_data_to_disk()
 
                 if task['mode'] == "trom":
                     await client.send_message(task['target'], f"/trom {task['data']}")
@@ -175,9 +173,13 @@ async def worker():
             spam_control["is_running"] = False
             spam_control["current_task"] = "Đang rảnh"
             if pending_tasks: pending_tasks.pop(0)
-            save_data_to_disk() # Lưu lại sau khi xong một task
+            save_data_to_disk()
 
-# --- CÁC ENDPOINT API CÓ BỔ SUNG LƯU DỮ LIỆU ---
+# --- ENDPOINTS ---
+
+@app.get("/health")
+async def health():
+    return {"status": "alive", "queue": len(pending_tasks)}
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
