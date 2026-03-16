@@ -4,9 +4,10 @@
 ![Tác giả](https://img.shields.io/badge/Author-NgDanhThanhTrung-blue?style=for-the-badge&logo=telegram)
 ![Ngôn ngữ](https://img.shields.io/badge/Language-Python-yellow?style=for-the-badge&logo=python)
 ![Trạng thái](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
+![Giao diện](https://img.shields.io/badge/UI-Modern_Dashboard-indigo?style=for-the-badge)
 ![Stars](https://img.shields.io/github/stars/NgDanhThanhTrung/UserBot?style=for-the-badge&color=gold)
 
-Dự án này là một giải pháp tự động hóa đột phá được nghiên cứu và phát triển độc quyền bởi **NgDanhThanhTrung**. Hệ thống biến tài khoản Telegram cá nhân thành một công cụ thực thi lệnh mạnh mẽ thông qua yêu cầu HTTP (URL), tối ưu cho các tác vụ lặp lại và phản xạ tự động.
+Dự án này là một giải pháp tự động hóa đột phá được nghiên cứu và phát triển độc quyền bởi **NgDanhThanhTrung**. Hệ thống biến tài khoản Telegram cá nhân thành một công cụ thực thi lệnh mạnh mẽ thông qua giao diện Web Dashboard quản trị, tối ưu cho các tác vụ lặp lại và theo dõi biến động tài khoản.
 
 ---
 
@@ -19,38 +20,36 @@ Dự án này là một giải pháp tự động hóa đột phá được nghi
 ---
 
 ## 🌟 Tính Năng Nổi Bật (Cập nhật 2026)
-* **HTTP Trigger 2.0**: Kích hoạt gửi tin nhắn tức thì bằng cách truy cập URL từ trình duyệt hoặc bất kỳ dịch vụ gọi API nào.
-* **Anti-Thief Reflection (Mới)**: Tự động nhận diện tin nhắn bị móc túi từ Bot mục tiêu và ngay lập tức kích hoạt phản công kẻ trộm.
-* **Sequence Automation**: Hỗ trợ chạy các chuỗi lệnh liên hoàn (Combo) như TX-Farm và Trom-Farm với thời gian nghỉ tối ưu.
-* **Smart Anti-Spam**: Cơ chế nghỉ ngẫu nhiên linh hoạt (từ 1.5s đến 7.5s) để mô phỏng hành vi người dùng thật và bảo vệ tài khoản khỏi bị ban.
-* **Multi-Target Control**: Điều khiển linh hoạt nhiều Bot mục tiêu hoặc khóa cứng mục tiêu cụ thể.
-* **Kill Switch**: Lệnh `/stop` giúp ngắt mọi tác vụ đang chạy ngay lập tức.
+* **Modern Dashboard UI**: Giao diện web quản trị chuyên nghiệp, hiển thị trạng thái hoạt động và thống kê thời gian thực.
+* **Thief Monitor (Bảng SV)**: Tự động ghi nhận, đếm số lần và xếp hạng những kẻ đã trộm tiền bạn (🥇🥈🥉) ngay trên giao diện web.
+* **Unstoppable Execution**: Cơ chế thực thi xuyên suốt, không bị cản trở bởi bất kỳ tin nhắn rác nào, đảm bảo vòng lặp hoàn thành tuyệt đối.
+* **Sequence Automation**: Hỗ trợ chạy các chuỗi lệnh liên hoàn (Combo) như TX-Farm và Trom-Farm với thời gian nghỉ nội bộ 1.0s.
+* **Hard-coded Safety Delay**: Khóa cứng khoảng cách nghỉ giữa các lượt lặp là **5.0 giây** để bảo vệ tài khoản khỏi cơ chế quét spam.
+* **Kill Switch**: Lệnh `/stop` trên web giúp ngắt mọi tác vụ đang chạy ngay lập tức.
 
 ---
 
 ## 📖 Cách Sử Dụng (API Endpoints)
 
-### 1. Phản Công Tự Động (Anti-Thief) — *Hot*
-Hệ thống luôn lắng nghe tin nhắn từ `@deptraikhongsoai_bot`. Nếu phát hiện nội dung thông báo bạn bị trộm tiền, UserBot sẽ:
-1. **Dừng** mọi tác vụ hiện tại (TX hoặc Trom cũ).
-2. **Tự động trích xuất** Username của kẻ trộm từ tin nhắn.
-3. **Thực thi** chuỗi lệnh `/trom {kẻ_trộm}` + `/mua mientu` liên tục **100 lần**.
+### 1. Quản Lý Hệ Thống & Thống Kê
+* **Trang chủ**: `/` ➜ Xem trạng thái UserBot (Rảnh/Bận) và tổng số lần bị trộm.
+* **Bảng SV**: `/sv` ➜ Hiển thị danh sách bảng xếp hạng những kẻ đã móc túi bạn.
+* **Reset SV**: `/clearsv` ➜ Xóa sạch dữ liệu thống kê để bắt đầu phiên mới.
+* **Dừng khẩn cấp**: `/stop` ➜ Ngắt mọi vòng lặp đang chạy.
 
 ### 2. Chế độ Chuỗi Lệnh Tài Xỉu (TX-Farm)
-Dành riêng cho `@deptraikhongsoai_bot`. Tự động thực hiện: 
-**Gửi `/tx t {tiền}`** ➜ Nghỉ 1.5s ➜ **Gửi `/mua buatx`** ➜ Nghỉ 5s-7.5s.
+Tự động thực hiện: **Gửi `/tx t {tiền}`** ➜ Nghỉ 1s ➜ **Gửi `/mua buatx`** ➜ Nghỉ 5s ➜ Lặp lại.
 * **Cấu trúc URL**: `https://{ten-app}.onrender.com/tx-t-{tiền}/{số_lần}`
-* **Ví dụ**: `/tx-t-5000/20` ➜ Tự động đánh 5000 và mua bùa 20 lần liên tục.
+* **Ví dụ**: `/tx-t-5000000/100` ➜ Đánh 5 triệu và mua bùa 100 lần liên tục.
 
 ### 3. Chế độ Chuỗi Lệnh Trộm (Trom-Farm)
-Dành riêng cho `@deptraikhongsoai_bot`. Tự động thực hiện: 
-**Gửi `/trom {ID}`** ➜ Nghỉ 1.5s ➜ **Gửi `/mua mientu`** ➜ Nghỉ 5s-7.5s.
+Tự động thực hiện: **Gửi `/trom {ID}`** ➜ Nghỉ 1s ➜ **Gửi `/mua mientu`** ➜ Nghỉ 5s ➜ Lặp lại.
 * **Cấu trúc URL**: `https://{ten-app}.onrender.com/trom-{ID}/{số_lần}`
-* **Ví dụ**: `/trom-7346983056/10` ➜ Thực hiện chuỗi trộm 10 lần cho mục tiêu cụ thể.
+* **Ví dụ**: `/trom-7346983056/50` ➜ Thực hiện chuỗi trộm 50 lần cho mục tiêu cụ thể.
 
 ### 4. Lệnh Đơn Universal
-* **URL**: `https://{ten-app}.onrender.com/{tên_bot}/{lệnh}/{số_lần}`
-* **Ví dụ**: `/NgDanhThanhTrung_BOT/diem-danh/1` ➜ Gửi `/diem danh #1`.
+* **URL**: `https://{ten-app}.onrender.com/{tên_bot}/{lệnh}/{số_lần}` (Thay dấu cách bằng `-`).
+* **Ví dụ**: `/deptraikhongsoai_bot/diem-danh/1` ➜ Gửi `/diem danh`.
 
 ---
 
