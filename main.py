@@ -95,11 +95,12 @@ def get_html_template(title, content):
                         <div class="space-y-2">{render_queue_list()}</div>
                     </div>
                 </div>
-                <div class="mt-8 flex justify-center gap-8 text-sm font-bold text-gray-500">
+                <div class="mt-8 flex justify-center flex-wrap gap-6 text-sm font-bold text-gray-500">
                     <a href="/" class="hover:text-indigo-600 transition"><i class="fa-solid fa-house"></i></a>
                     <a href="/sv" class="hover:text-indigo-600 transition">Bảng SV</a>
-                    <a href="/clear-queue" class="hover:text-orange-500 transition text-red-400">Xóa hàng chờ</a>
-                    <a href="/stop" class="hover:text-red-500 transition font-black">STOP</a>
+                    <a href="/clearsv" class="hover:text-red-500 transition text-red-400">Dọn SV</a>
+                    <a href="/clear-queue" class="hover:text-orange-500 transition text-orange-400">Xóa hàng chờ</a>
+                    <a href="/stop" class="hover:text-red-600 transition font-black">STOP</a>
                 </div>
             </div>
         </body>
@@ -109,7 +110,7 @@ def get_html_template(title, content):
 def render_queue_list():
     if not pending_tasks: return "<p class='text-xs text-gray-400 italic ml-2'>Trống...</p>"
     items = ""
-    for idx, task in enumerate(pending_tasks[:10]): # Chỉ hiện 10 lệnh đầu để tránh lag
+    for idx, task in enumerate(pending_tasks[:10]):
         is_active = (idx == 0 and spam_control["is_running"])
         active_class = "active" if is_active else ""
         rem = task.get('remaining', task['count'])
@@ -180,6 +181,13 @@ async def worker():
 @app.get("/health")
 async def health():
     return {"status": "alive", "queue": len(pending_tasks)}
+
+@app.get("/clearsv")
+async def clearsv():
+    global thief_stats
+    thief_stats = {}
+    save_data_to_disk()
+    return RedirectResponse(url="/sv", status_code=303)
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
