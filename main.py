@@ -1,7 +1,7 @@
 import os
 import asyncio
 import logging
-import random
+import json
 import re
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -14,23 +14,53 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Biến môi trường (Lấy từ Render/Heroku)
+# Biến môi trường
 API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
 SESSION_STR = os.environ.get("SESSION_STR", "")
 
-# Quản lý trạng thái và hàng đợi
+# FILE LƯU TRỮ DỮ LIỆU
+DATA_FILE = "bot_data.json"
+
+# Hàm lưu dữ liệu vào file
+def save_data_to_disk():
+    try:
+        data = {
+            "thief_stats": thief_stats,
+            "pending_tasks": pending_tasks
+        }
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logger.error(f"Lỗi khi lưu file: {e}")
+
+# Hàm tải dữ liệu từ file
+def load_data_from_disk():
+    global thief_stats, pending_tasks
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                thief_stats = data.get("thief_stats", {})
+                pending_tasks = data.get("pending_tasks", [])
+                logger.info("Đã khôi phục dữ liệu từ bộ nhớ tạm!")
+        except Exception as e:
+            logger.error(f"Lỗi khi đọc file: {e}")
+
+# Khởi tạo biến
 thief_stats = {}
-pending_tasks = [] # Danh sách hiển thị trên Dashboard
+pending_tasks = []
+load_data_from_disk() # Gọi hàm tải lại dữ liệu ngay khi chạy code
+
 spam_control = {"is_running": False, "stop_flag": False, "current_task": "Đang rảnh"}
 client = TelegramClient(StringSession(SESSION_STR), API_ID, API_HASH)
 
+# --- GIỮ NGUYÊN CÁC HÀM get_html_template VÀ render_queue_list NHƯ CŨ ---
 def get_html_template(title, content):
     total_stolen = sum(thief_stats.values())
     queue_size = len(pending_tasks)
     status_text = f"● {spam_control['current_task']}"
     status_class = 'text-amber-500 animate-pulse' if spam_control['is_running'] else 'text-green-500'
-
     return f"""
     <html>
         <head>
@@ -60,17 +90,13 @@ def get_html_template(title, content):
                         <span class="text-2xl font-black text-red-500">{total_stolen}</span>
                     </div>
                 </div>
-                
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="md:col-span-2 space-y-6">
-                        <div class="main-card p-6">{content}</div>
-                    </div>
+                    <div class="md:col-span-2 space-y-6"><div class="main-card p-6">{content}</div></div>
                     <div class="space-y-4">
                         <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Danh sách chờ</h3>
                         <div class="space-y-2">{render_queue_list()}</div>
                     </div>
                 </div>
-
                 <div class="mt-8 flex justify-center gap-8 text-sm font-bold text-gray-500">
                     <a href="/" class="hover:text-indigo-600 transition"><i class="fa-solid fa-house"></i></a>
                     <a href="/sv" class="hover:text-indigo-600 transition">Bảng SV</a>
@@ -83,8 +109,7 @@ def get_html_template(title, content):
     """
 
 def render_queue_list():
-    if not pending_tasks:
-        return "<p class='text-xs text-gray-400 italic ml-2'>Trống...</p>"
+    if not pending_tasks: return "<p class='text-xs text-gray-400 italic ml-2'>Trống...</p>"
     items = ""
     for idx, task in enumerate(pending_tasks):
         is_active = (idx == 0 and spam_control["is_running"])
@@ -109,6 +134,7 @@ async def monitor_thieves_handler(event):
         if match:
             thief = f"@{match.group(1)}"
             thief_stats[thief] = thief_stats.get(thief, 0) + 1
+            save_data_to_disk() # Lưu lại khi có thay đổi thống kê
 
 async def worker():
     global spam_control, pending_tasks
@@ -127,8 +153,8 @@ async def worker():
             for i in range(task['count']):
                 if spam_control["stop_flag"]: break
                 task['remaining'] = task['count'] - i
-                
-                # CHUỖI HOẠT ĐỘNG: LỆNH -> NGHỈ 1S -> MUA BẢO VỆ
+                save_data_to_disk() # Cập nhật tiến độ vào file
+
                 if task['mode'] == "trom":
                     await client.send_message(task['target'], f"/trom {task['data']}")
                     await asyncio.sleep(1.0)
@@ -141,9 +167,7 @@ async def worker():
                     msg = task['data'] if task['data'].startswith("/") else f"/{task['data']}"
                     await client.send_message(task['target'], msg)
                 
-                # NGHỈ 5 GIÂY GIỮA CÁC LẦN LẶP
-                if i < task['count'] - 1:
-                    await asyncio.sleep(5.0)
+                if i < task['count'] - 1: await asyncio.sleep(5.0)
                     
         except Exception as e:
             logger.error(f"Worker Error: {e}")
@@ -151,6 +175,9 @@ async def worker():
             spam_control["is_running"] = False
             spam_control["current_task"] = "Đang rảnh"
             if pending_tasks: pending_tasks.pop(0)
+            save_data_to_disk() # Lưu lại sau khi xong một task
+
+# --- CÁC ENDPOINT API CÓ BỔ SUNG LƯU DỮ LIỆU ---
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -171,6 +198,7 @@ async def root():
 @app.post("/send-manual")
 async def send_manual(cmd: str = Form(...), count: int = Form(...)):
     pending_tasks.append({"target": "deptraikhongsoai_bot", "data": cmd, "count": count, "mode": "manual", "remaining": count})
+    save_data_to_disk()
     return RedirectResponse(url="/", status_code=303)
 
 @app.get("/clear-queue")
@@ -178,6 +206,7 @@ async def clear_queue():
     global pending_tasks
     if len(pending_tasks) > 1: pending_tasks = [pending_tasks[0]]
     else: pending_tasks = []
+    save_data_to_disk()
     return RedirectResponse(url="/", status_code=303)
 
 @app.get("/sv", response_class=HTMLResponse)
@@ -192,26 +221,26 @@ async def stop():
     global pending_tasks
     spam_control["stop_flag"] = True
     pending_tasks = []
+    save_data_to_disk()
     return RedirectResponse(url="/", status_code=303)
-
-@app.get("/health")
-async def health():
-    return {"status": "alive", "queue": len(pending_tasks)}
 
 @app.get("/trom-{user_id}/{count}")
 async def trom_api(user_id: str, count: int):
     pending_tasks.append({"target": "deptraikhongsoai_bot", "data": user_id, "count": count, "mode": "trom", "remaining": count})
+    save_data_to_disk()
     return RedirectResponse(url="/", status_code=303)
 
 @app.get("/tx-t-{amount}/{count}")
 async def tx_api(amount: str, count: int):
     pending_tasks.append({"target": "deptraikhongsoai_bot", "data": amount, "count": count, "mode": "tx", "remaining": count})
+    save_data_to_disk()
     return RedirectResponse(url="/", status_code=303)
 
 @app.get("/{bot_username}/{command}/{count}")
 async def dynamic_trigger(bot_username: str, command: str, count: int):
     full_cmd = command.replace('-', ' ')
     pending_tasks.append({"target": bot_username, "data": full_cmd, "count": count, "mode": "universal", "remaining": count})
+    save_data_to_disk()
     return RedirectResponse(url="/", status_code=303)
 
 @app.on_event("startup")
