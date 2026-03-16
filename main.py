@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Biến môi trường
+# Biến môi trường (Lấy từ Render/Heroku)
 API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
 SESSION_STR = os.environ.get("SESSION_STR", "")
 
 # Quản lý trạng thái và hàng đợi
 thief_stats = {}
-pending_tasks = [] # Danh sách lệnh đang chờ xử lý (hiển thị trực quan trên Dashboard)
+pending_tasks = [] # Danh sách hiển thị trên Dashboard
 spam_control = {"is_running": False, "stop_flag": False, "current_task": "Đang rảnh"}
 client = TelegramClient(StringSession(SESSION_STR), API_ID, API_HASH)
 
@@ -53,7 +53,7 @@ def get_html_template(title, content):
                     <div>
                         <h1 class="text-xl font-bold text-gray-800 uppercase tracking-tight">{title}</h1>
                         <p class="text-sm {status_class} font-bold mt-1">{status_text}</p>
-                        <p class="text-[10px] text-gray-400 font-bold uppercase mt-1">Tổng hàng chờ: {queue_size} lệnh</p>
+                        <p class="text-[10px] text-gray-400 font-bold uppercase mt-1">Hàng chờ: {queue_size} lệnh</p>
                     </div>
                     <div class="text-right">
                         <span class="block text-xs text-gray-400 uppercase font-semibold">Bị móc túi</span>
@@ -65,12 +65,9 @@ def get_html_template(title, content):
                     <div class="md:col-span-2 space-y-6">
                         <div class="main-card p-6">{content}</div>
                     </div>
-                    
                     <div class="space-y-4">
-                        <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Hàng đợi chi tiết</h3>
-                        <div class="space-y-2">
-                            {render_queue_list()}
-                        </div>
+                        <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Danh sách chờ</h3>
+                        <div class="space-y-2">{render_queue_list()}</div>
                     </div>
                 </div>
 
@@ -78,8 +75,7 @@ def get_html_template(title, content):
                     <a href="/" class="hover:text-indigo-600 transition"><i class="fa-solid fa-house"></i></a>
                     <a href="/sv" class="hover:text-indigo-600 transition">Bảng SV</a>
                     <a href="/clear-queue" class="hover:text-orange-500 transition text-red-400">Xóa hàng chờ</a>
-                    <a href="/stop" class="hover:text-red-500 transition">STOP</a>
-                    <a href="/health" class="hover:text-green-500 transition">Health</a>
+                    <a href="/stop" class="hover:text-red-500 transition font-black">STOP</a>
                 </div>
             </div>
         </body>
@@ -88,26 +84,19 @@ def get_html_template(title, content):
 
 def render_queue_list():
     if not pending_tasks:
-        return "<p class='text-xs text-gray-400 italic ml-2'>Không có lệnh...</p>"
+        return "<p class='text-xs text-gray-400 italic ml-2'>Trống...</p>"
     items = ""
     for idx, task in enumerate(pending_tasks):
         is_active = (idx == 0 and spam_control["is_running"])
         active_class = "active" if is_active else ""
-        status_label = "RUNNING" if is_active else "WAITING"
         rem = task.get('remaining', task['count'])
         items += f"""
         <div class="main-card p-3 queue-item {active_class}">
-            <div class="flex justify-between items-start text-[10px] font-bold">
+            <div class="flex justify-between text-[10px] font-bold">
                 <span class="text-indigo-600 uppercase">{task['mode']}</span>
-                <span class="{'text-indigo-500' if is_active else 'text-gray-400'}">{status_label}</span>
+                <span class="text-gray-400">{rem}/{task['count']}</span>
             </div>
             <p class="text-xs font-bold text-gray-700 truncate mt-1">{task['data']}</p>
-            <div class="flex justify-between mt-2 items-center text-[9px] font-bold text-gray-500">
-                <div class="w-full bg-gray-100 h-1 rounded-full mr-2">
-                    <div class="bg-indigo-500 h-1 rounded-full" style="width: {(rem/task['count'])*100}%"></div>
-                </div>
-                <span>{rem}/{task['count']}</span>
-            </div>
         </div>
         """
     return items
@@ -139,6 +128,7 @@ async def worker():
                 if spam_control["stop_flag"]: break
                 task['remaining'] = task['count'] - i
                 
+                # CHUỖI HOẠT ĐỘNG: LỆNH -> NGHỈ 1S -> MUA BẢO VỆ
                 if task['mode'] == "trom":
                     await client.send_message(task['target'], f"/trom {task['data']}")
                     await asyncio.sleep(1.0)
@@ -151,7 +141,10 @@ async def worker():
                     msg = task['data'] if task['data'].startswith("/") else f"/{task['data']}"
                     await client.send_message(task['target'], msg)
                 
-                if i < task['count'] - 1: await asyncio.sleep(5.0)
+                # NGHỈ 5 GIÂY GIỮA CÁC LẦN LẶP
+                if i < task['count'] - 1:
+                    await asyncio.sleep(5.0)
+                    
         except Exception as e:
             logger.error(f"Worker Error: {e}")
         finally:
@@ -163,20 +156,12 @@ async def worker():
 async def root():
     content = """
     <div class="py-2">
-        <h2 class="text-gray-700 font-bold mb-4 flex items-center"><i class="fa-solid fa-paper-plane mr-2 text-indigo-500"></i> GỬI LỆNH MỚI</h2>
+        <h2 class="text-gray-700 font-bold mb-4 flex items-center"><i class="fa-solid fa-paper-plane mr-2 text-indigo-500"></i> GỬI LỆNH</h2>
         <form action="/send-manual" method="post" class="space-y-4">
-            <div>
-                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Nội dung lệnh</label>
-                <input type="text" name="cmd" placeholder="Ví dụ: diem danh" class="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" required>
-            </div>
+            <input type="text" name="cmd" placeholder="Lệnh (ví dụ: diem danh)" class="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" required>
             <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1">Số lần</label>
-                    <input type="number" name="count" value="1" min="1" class="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl outline-none">
-                </div>
-                <div class="flex items-end">
-                    <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-indigo-700 transition uppercase text-xs tracking-tighter">Gửi vào hàng</button>
-                </div>
+                <input type="number" name="count" value="1" min="1" class="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl outline-none">
+                <button type="submit" class="bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition uppercase text-xs">Thêm vào hàng</button>
             </div>
         </form>
     </div>
@@ -188,7 +173,7 @@ async def send_manual(cmd: str = Form(...), count: int = Form(...)):
     pending_tasks.append({"target": "deptraikhongsoai_bot", "data": cmd, "count": count, "mode": "manual", "remaining": count})
     return RedirectResponse(url="/", status_code=303)
 
-@app.get("/clear-queue", response_class=HTMLResponse)
+@app.get("/clear-queue")
 async def clear_queue():
     global pending_tasks
     if len(pending_tasks) > 1: pending_tasks = [pending_tasks[0]]
@@ -202,7 +187,7 @@ async def view_stats():
     content = f'<table class="w-full text-left"><thead><tr class="text-[10px] font-black text-gray-400 uppercase border-b-2 border-gray-100"><th class="px-4 py-2">Kẻ trộm</th><th class="px-4 py-2 text-right">Tần suất</th></tr></thead><tbody>{rows}</tbody></table>'
     return get_html_template("Bảng Thống Kê SV", content)
 
-@app.get("/stop", response_class=HTMLResponse)
+@app.get("/stop")
 async def stop():
     global pending_tasks
     spam_control["stop_flag"] = True
@@ -211,7 +196,7 @@ async def stop():
 
 @app.get("/health")
 async def health():
-    return {"status": "alive", "queue_size": len(pending_tasks), "is_running": spam_control["is_running"]}
+    return {"status": "alive", "queue": len(pending_tasks)}
 
 @app.get("/trom-{user_id}/{count}")
 async def trom_api(user_id: str, count: int):
@@ -225,7 +210,6 @@ async def tx_api(amount: str, count: int):
 
 @app.get("/{bot_username}/{command}/{count}")
 async def dynamic_trigger(bot_username: str, command: str, count: int):
-    """API Universal: Hỗ trợ kích hoạt từ xa qua URL"""
     full_cmd = command.replace('-', ' ')
     pending_tasks.append({"target": bot_username, "data": full_cmd, "count": count, "mode": "universal", "remaining": count})
     return RedirectResponse(url="/", status_code=303)
