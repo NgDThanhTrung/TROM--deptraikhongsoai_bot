@@ -1,6 +1,7 @@
 telethon==1.36.0
 fastapi
 uvicorn[standard]
+python-multipart
 python-dotenv
 cryptg
 beautifulsoup4
