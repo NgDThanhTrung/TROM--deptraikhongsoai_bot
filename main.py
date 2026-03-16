@@ -8,33 +8,29 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
-# Cấu hình Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Biến môi trường
 API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
 SESSION_STR = os.environ.get("SESSION_STR", "")
 
-# FILE LƯU TRỮ DỮ LIỆU
 DATA_FILE = "bot_data.json"
+PRIORITY_COMMANDS = ["daily", "work", "dao"]
 
-# Biến toàn cục
 thief_stats = {}
 pending_tasks = []
 spam_control = {"is_running": False, "stop_flag": False, "current_task": "Đang rảnh"}
 
-# Hàm lưu/tải dữ liệu
 def save_data_to_disk():
     try:
         data = {"thief_stats": thief_stats, "pending_tasks": pending_tasks}
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
     except Exception as e:
-        logger.error(f"Lỗi lưu file: {e}")
+        logger.error(f"Save error: {e}")
 
 def load_data_from_disk():
     global thief_stats, pending_tasks
@@ -44,16 +40,23 @@ def load_data_from_disk():
                 data = json.load(f)
                 thief_stats = data.get("thief_stats", {})
                 pending_tasks = data.get("pending_tasks", [])
-                logger.info("Đã khôi phục dữ liệu!")
         except Exception as e:
-            logger.error(f"Lỗi đọc file: {e}")
+            logger.error(f"Load error: {e}")
 
-# Tải dữ liệu cũ ngay khi khởi động
 load_data_from_disk()
-
 client = TelegramClient(StringSession(SESSION_STR), API_ID, API_HASH)
 
-# --- GIAO DIỆN DASHBOARD ---
+def add_task_to_queue(target, data, count, mode):
+    global pending_tasks
+    new_task = {"target": target, "data": data, "count": count, "mode": mode, "remaining": count}
+    is_priority = any(p in data.lower() for p in PRIORITY_COMMANDS)
+    if is_priority:
+        insert_idx = 1 if spam_control["is_running"] else 0
+        pending_tasks.insert(insert_idx, new_task)
+    else:
+        pending_tasks.append(new_task)
+    save_data_to_disk()
+
 def get_html_template(title, content):
     total_stolen = sum(thief_stats.values())
     queue_size = len(pending_tasks)
@@ -73,6 +76,7 @@ def get_html_template(title, content):
                 .main-card {{ background: white; border-radius: 1.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); overflow: hidden; }}
                 .queue-item {{ border-left: 4px solid #e2e8f0; transition: all 0.3s; }}
                 .queue-item.active {{ border-left-color: #4f46e5; background: #f5f3ff; }}
+                .priority {{ border-left-color: #f59e0b !important; background: #fffbeb; }}
             </style>
         </head>
         <body class="p-4 sm:p-8">
@@ -96,10 +100,10 @@ def get_html_template(title, content):
                     </div>
                 </div>
                 <div class="mt-8 flex justify-center flex-wrap gap-6 text-sm font-bold text-gray-500">
-                    <a href="/" class="hover:text-indigo-600 transition"><i class="fa-solid fa-house"></i></a>
+                    <a href="/" class="hover:text-indigo-600 transition">Trang chủ</a>
                     <a href="/sv" class="hover:text-indigo-600 transition">Bảng SV</a>
-                    <a href="/clearsv" class="hover:text-red-500 transition text-red-400">Dọn SV</a>
-                    <a href="/clear-queue" class="hover:text-orange-500 transition text-orange-400">Xóa hàng chờ</a>
+                    <a href="/clearsv" class="hover:text-red-500 transition">Dọn SV</a>
+                    <a href="/clear-queue" class="hover:text-orange-500 transition">Xóa hàng</a>
                     <a href="/stop" class="hover:text-red-600 transition font-black">STOP</a>
                 </div>
             </div>
@@ -110,14 +114,15 @@ def get_html_template(title, content):
 def render_queue_list():
     if not pending_tasks: return "<p class='text-xs text-gray-400 italic ml-2'>Trống...</p>"
     items = ""
-    for idx, task in enumerate(pending_tasks[:10]):
+    for idx, task in enumerate(pending_tasks[:12]):
         is_active = (idx == 0 and spam_control["is_running"])
-        active_class = "active" if is_active else ""
+        is_prio = any(p in task['data'].lower() for p in PRIORITY_COMMANDS)
+        active_class = "active" if is_active else ("priority" if is_prio else "")
         rem = task.get('remaining', task['count'])
         items += f"""
         <div class="main-card p-3 queue-item {active_class}">
             <div class="flex justify-between text-[10px] font-bold">
-                <span class="text-indigo-600 uppercase">{task['mode']}</span>
+                <span class="text-indigo-600 uppercase">{"⭐ ƯU TIÊN" if is_prio else task['mode']}</span>
                 <span class="text-gray-400">{rem}/{task['count']}</span>
             </div>
             <p class="text-xs font-bold text-gray-700 truncate mt-1">{task['data']}</p>
@@ -141,19 +146,15 @@ async def worker():
         if not pending_tasks:
             await asyncio.sleep(1)
             continue
-        
         task = pending_tasks[0]
-        spam_control["is_running"] = True
-        spam_control["stop_flag"] = False
-        spam_control["current_task"] = f"Chạy {task['mode']}: {task['data']}"
-        
+        spam_control["is_running"], spam_control["stop_flag"] = True, False
+        spam_control["current_task"] = f"Chạy: {task['data']}"
         try:
             if not client.is_connected(): await client.connect()
             for i in range(task['count']):
                 if spam_control["stop_flag"]: break
                 task['remaining'] = task['count'] - i
                 save_data_to_disk()
-
                 if task['mode'] == "trom":
                     await client.send_message(task['target'], f"/trom {task['data']}")
                     await asyncio.sleep(1.0)
@@ -165,9 +166,7 @@ async def worker():
                 else: 
                     msg = task['data'] if task['data'].startswith("/") else f"/{task['data']}"
                     await client.send_message(task['target'], msg)
-                
                 if i < task['count'] - 1: await asyncio.sleep(5.0)
-                    
         except Exception as e:
             logger.error(f"Worker Error: {e}")
         finally:
@@ -175,8 +174,6 @@ async def worker():
             spam_control["current_task"] = "Đang rảnh"
             if pending_tasks: pending_tasks.pop(0)
             save_data_to_disk()
-
-# --- ENDPOINTS ---
 
 @app.get("/health")
 async def health():
@@ -195,7 +192,7 @@ async def root():
     <div class="py-2">
         <h2 class="text-gray-700 font-bold mb-4 flex items-center"><i class="fa-solid fa-paper-plane mr-2 text-indigo-500"></i> GỬI LỆNH</h2>
         <form action="/send-manual" method="post" class="space-y-4">
-            <input type="text" name="cmd" placeholder="Lệnh (ví dụ: diem danh)" class="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" required>
+            <input type="text" name="cmd" placeholder="Nhập lệnh..." class="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" required>
             <div class="grid grid-cols-2 gap-4">
                 <input type="number" name="count" value="1" min="1" class="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl outline-none">
                 <button type="submit" class="bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition uppercase text-xs">Thêm vào hàng</button>
@@ -207,8 +204,7 @@ async def root():
 
 @app.post("/send-manual")
 async def send_manual(cmd: str = Form(...), count: int = Form(...)):
-    pending_tasks.append({"target": "deptraikhongsoai_bot", "data": cmd, "count": count, "mode": "manual", "remaining": count})
-    save_data_to_disk()
+    add_task_to_queue("deptraikhongsoai_bot", cmd, count, "manual")
     return RedirectResponse(url="/", status_code=303)
 
 @app.get("/clear-queue")
@@ -236,21 +232,18 @@ async def stop():
 
 @app.get("/trom-{user_id}/{count}")
 async def trom_api(user_id: str, count: int):
-    pending_tasks.append({"target": "deptraikhongsoai_bot", "data": user_id, "count": count, "mode": "trom", "remaining": count})
-    save_data_to_disk()
+    add_task_to_queue("deptraikhongsoai_bot", user_id, count, "trom")
     return RedirectResponse(url="/", status_code=303)
 
 @app.get("/tx-t-{amount}/{count}")
 async def tx_api(amount: str, count: int):
-    pending_tasks.append({"target": "deptraikhongsoai_bot", "data": amount, "count": count, "mode": "tx", "remaining": count})
-    save_data_to_disk()
+    add_task_to_queue("deptraikhongsoai_bot", amount, count, "tx")
     return RedirectResponse(url="/", status_code=303)
 
 @app.get("/{bot_username}/{command}/{count}")
 async def dynamic_trigger(bot_username: str, command: str, count: int):
     full_cmd = command.replace('-', ' ')
-    pending_tasks.append({"target": bot_username, "data": full_cmd, "count": count, "mode": "universal", "remaining": count})
-    save_data_to_disk()
+    add_task_to_queue(bot_username, full_cmd, count, "universal")
     return RedirectResponse(url="/", status_code=303)
 
 @app.on_event("startup")
