@@ -3,7 +3,7 @@ import asyncio
 import logging
 import json
 import re
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -57,11 +57,14 @@ def add_task_to_queue(target, data, count, mode):
         pending_tasks.append(new_task)
     save_data_to_disk()
 
-def get_html_template(title, content):
+def get_html_template(title, content, request: Request = None):
     total_stolen = sum(thief_stats.values())
     queue_size = len(pending_tasks)
     status_text = f"● {spam_control['current_task']}"
     status_class = 'text-amber-500 animate-pulse' if spam_control['is_running'] else 'text-green-500'
+    
+    base_url = str(request.base_url).rstrip('/') if request else ""
+    
     return f"""
     <html>
         <head>
@@ -77,10 +80,11 @@ def get_html_template(title, content):
                 .queue-item {{ border-left: 4px solid #e2e8f0; transition: all 0.3s; }}
                 .queue-item.active {{ border-left-color: #4f46e5; background: #f5f3ff; }}
                 .priority {{ border-left-color: #f59e0b !important; background: #fffbeb; }}
+                code {{ background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; color: #4f46e5; }}
             </style>
         </head>
         <body class="p-4 sm:p-8">
-            <div class="max-w-3xl mx-auto">
+            <div class="max-w-4xl mx-auto">
                 <div class="main-card p-6 mb-6 flex justify-between items-center border-b-4 border-indigo-500">
                     <div>
                         <h1 class="text-xl font-bold text-gray-800 uppercase tracking-tight">{title}</h1>
@@ -92,13 +96,40 @@ def get_html_template(title, content):
                         <span class="text-2xl font-black text-red-500">{total_stolen}</span>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="md:col-span-2 space-y-6"><div class="main-card p-6">{content}</div></div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 space-y-6">
+                        <div class="main-card p-6">{content}</div>
+                        
+                        <div class="main-card p-6">
+                            <h3 class="text-sm font-bold text-gray-700 mb-4 uppercase"><i class="fa-solid fa-link mr-2"></i> Danh sách URL Ping</h3>
+                            <div class="space-y-3 text-[11px]">
+                                <div class="p-2 border-b">
+                                    <p class="font-bold text-gray-500 mb-1 uppercase">Kiểm tra trạng thái (Ping)</p>
+                                    <code>{base_url}/health</code>
+                                </div>
+                                <div class="p-2 border-b">
+                                    <p class="font-bold text-gray-500 mb-1 uppercase">Lệnh Trộm (User / Số lần)</p>
+                                    <code>{base_url}/trom-ID_USER/10</code>
+                                </div>
+                                <div class="p-2 border-b">
+                                    <p class="font-bold text-gray-500 mb-1 uppercase">Lệnh Tài Xỉu (Tiền / Số lần)</p>
+                                    <code>{base_url}/tx-t-5000/5</code>
+                                </div>
+                                <div class="p-2 border-b">
+                                    <p class="font-bold text-gray-500 mb-1 uppercase">Lệnh bất kỳ (Bot / Lệnh / Lần)</p>
+                                    <code>{base_url}/bot_user/lenh-nhu-nay/1</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="space-y-4">
-                        <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Danh sách chờ</h3>
+                        <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Hàng chờ</h3>
                         <div class="space-y-2">{render_queue_list()}</div>
                     </div>
                 </div>
+
                 <div class="mt-8 flex justify-center flex-wrap gap-6 text-sm font-bold text-gray-500">
                     <a href="/" class="hover:text-indigo-600 transition">Trang chủ</a>
                     <a href="/sv" class="hover:text-indigo-600 transition">Bảng SV</a>
@@ -187,7 +218,7 @@ async def clearsv():
     return RedirectResponse(url="/sv", status_code=303)
 
 @app.get("/", response_class=HTMLResponse)
-async def root():
+async def root(request: Request):
     content = """
     <div class="py-2">
         <h2 class="text-gray-700 font-bold mb-4 flex items-center"><i class="fa-solid fa-paper-plane mr-2 text-indigo-500"></i> GỬI LỆNH</h2>
@@ -200,7 +231,7 @@ async def root():
         </form>
     </div>
     """
-    return get_html_template("UserBot Dashboard", content)
+    return get_html_template("UserBot Dashboard", content, request)
 
 @app.post("/send-manual")
 async def send_manual(cmd: str = Form(...), count: int = Form(...)):
@@ -216,11 +247,11 @@ async def clear_queue():
     return RedirectResponse(url="/", status_code=303)
 
 @app.get("/sv", response_class=HTMLResponse)
-async def view_stats():
+async def view_stats(request: Request):
     rows = "".join([f'<tr class="border-b border-gray-50"><td class="px-4 py-4 text-indigo-600 font-bold">{k}</td><td class="px-4 py-4 text-right"><span class="bg-red-100 text-red-600 px-3 py-1 rounded-lg text-xs font-black">{v} LẦN</span></td></tr>' 
                    for k, v in sorted(thief_stats.items(), key=lambda x: x[1], reverse=True)]) or "<tr><td colspan='2' class='text-center py-10 text-gray-400'>Trống</td></tr>"
     content = f'<table class="w-full text-left"><thead><tr class="text-[10px] font-black text-gray-400 uppercase border-b-2 border-gray-100"><th class="px-4 py-2">Kẻ trộm</th><th class="px-4 py-2 text-right">Tần suất</th></tr></thead><tbody>{rows}</tbody></table>'
-    return get_html_template("Bảng Thống Kê SV", content)
+    return get_html_template("Bảng Thống Kê SV", content, request)
 
 @app.get("/stop")
 async def stop():
