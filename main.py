@@ -21,6 +21,7 @@ BASE_URL = "https://userbot-6zry.onrender.com"
 
 DATA_FILE = "bot_data.json"
 PRIORITY_COMMANDS = ["daily", "work", "dao"]
+# Danh sách những người không trộm (viết thường)
 EXCLUDE_LIST = ["ngdanh_thanhtrung", "tminhluva", "ngploc", "omg126652", "mhi168"]
 
 thief_stats = {}
@@ -64,34 +65,36 @@ def add_task_to_queue(target, data, count, mode):
 async def auto_scan_top(event):
     global pending_tasks
     if "BẢNG XẾP HẠNG ĐẠI GIA" in event.raw_text:
+        # Khi có bảng mới, xóa bớt các lệnh trộm cũ để ưu tiên danh sách mới
         if len(pending_tasks) > 1:
-            pending_tasks = [pending_tasks[0]]
-        elif len(pending_tasks) == 1 and not spam_control["is_running"]:
-            pending_tasks = []
-            
+            pending_tasks = [pending_tasks[0]] if spam_control["is_running"] else []
+
         pattern = r"#\d+\s*\|[^|]+\|\s*(@[a-zA-Z0-9\\_:]+)"
         matches = re.findall(pattern, event.raw_text)
         
         async with httpx.AsyncClient() as http_client:
             for raw_user in matches:
                 user_clean = raw_user.replace("\\", "").rstrip(":")
-                
                 check_name = user_clean.lower().replace("@", "")
+                
+                # Bỏ qua nếu nằm trong danh sách đen
                 if any(ex in check_name for ex in EXCLUDE_LIST):
                     continue
 
+                # Thuật toán tách ID hoặc giữ nguyên Username
                 if user_clean.lower().startswith("@id"):
                     final_target = user_clean[3:]
                 else:
                     final_target = user_clean
                 
+                # TRUY CẬP TRỰC TIẾP VÀO LINK CHỈ ĐỊNH
                 url = f"{BASE_URL}/trom-{final_target}/50"
                 try:
-                    await http_client.get(url)
-                    logger.info(f"Auto Queue: {final_target}")
-                    await asyncio.sleep(0.3)
+                    await http_client.get(url, timeout=10.0)
+                    logger.info(f"Đã kích hoạt truy cập: {url}")
+                    await asyncio.sleep(0.6) # Tránh dồn request quá nhanh
                 except Exception as e:
-                    logger.error(f"API Error: {e}")
+                    logger.error(f"Lỗi truy cập {url}: {e}")
 
 def get_success_page(msg, target, cmd, count):
     return f"""
