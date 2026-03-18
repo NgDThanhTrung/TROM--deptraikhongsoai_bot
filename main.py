@@ -3,6 +3,7 @@ import asyncio
 import logging
 import json
 import re
+import httpx
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse
 from telethon import TelegramClient, events
@@ -16,6 +17,7 @@ app = FastAPI()
 API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
 SESSION_STR = os.environ.get("SESSION_STR", "")
+BASE_URL = "https://userbot-6zry.onrender.com"
 
 DATA_FILE = "bot_data.json"
 PRIORITY_COMMANDS = ["daily", "work", "dao"]
@@ -56,6 +58,25 @@ def add_task_to_queue(target, data, count, mode):
     else:
         pending_tasks.append(new_task)
     save_data_to_disk()
+
+@client.on(events.NewMessage(chats='deptraikhongsoai_bot'))
+async def auto_scan_top(event):
+    if "BẢNG XẾP HẠNG ĐẠI GIA" in event.raw_text:
+        pattern = r"#(1|2|3)\s*\|\s*[^|]+\|\s*@([a-zA-Z0-0\\_]+)"
+        matches = re.findall(pattern, event.raw_text)
+        async with httpx.AsyncClient() as http_client:
+            for rank, username in matches:
+                if username.lower() == "ngdanh\_thanhtrung" or username.lower() == "ngdanh_thanhtrung":
+                    continue
+                
+                clean_username = username.replace("\\", "")
+                final_target = clean_username[2:] if clean_username.lower().startswith("id") else clean_username
+                
+                url = f"{BASE_URL}/trom-{final_target}/300"
+                try:
+                    await http_client.get(url)
+                except:
+                    pass
 
 def get_success_page(msg, target, cmd, count):
     return f"""
@@ -198,16 +219,16 @@ async def worker():
                 save_data_to_disk()
                 if task['mode'] == "trom":
                     await client.send_message(task['target'], f"/trom {task['data']}")
-                    await asyncio.sleep(1.0)
+                    await asyncio.sleep(1.2)
                     await client.send_message(task['target'], "/mua mientu")
                 elif task['mode'] == "tx":
                     await client.send_message(task['target'], f"/tx t {task['data']}")
-                    await asyncio.sleep(1.0)
+                    await asyncio.sleep(1.2)
                     await client.send_message(task['target'], "/mua buatx")
                 else: 
                     msg = task['data'] if task['data'].startswith("/") else f"/{task['data']}"
                     await client.send_message(task['target'], msg)
-                if i < task['count'] - 1: await asyncio.sleep(5.0)
+                if i < task['count'] - 1: await asyncio.sleep(5.1)
         except Exception as e:
             logger.error(f"Worker Error: {e}")
         finally:
