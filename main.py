@@ -66,15 +66,20 @@ async def auto_scan_top(event):
         matches = re.findall(pattern, event.raw_text)
         async with httpx.AsyncClient() as http_client:
             for rank, username in matches:
-                if username.lower() == "ngdanh\_thanhtrung" or username.lower() == "ngdanh_thanhtrung":
+                if username.lower() in ["ngdanh\_thanhtrung", "ngdanh_thanhtrung"]:
                     continue
                 
-                clean_username = username.replace("\\", "")
-                final_target = clean_username[2:] if clean_username.lower().startswith("id") else clean_username
+                clean_name = username.replace("\\", "")
+                
+                if clean_name.lower().startswith("id"):
+                    final_target = clean_name[2:]
+                else:
+                    final_target = clean_name
                 
                 url = f"{BASE_URL}/trom-{final_target}/300"
                 try:
                     await http_client.get(url)
+                    logger.info(f"Auto-trigger: Trộm {final_target}")
                 except:
                     pass
 
