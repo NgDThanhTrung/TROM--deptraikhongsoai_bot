@@ -21,6 +21,7 @@ BASE_URL = "https://userbot-6zry.onrender.com"
 
 DATA_FILE = "bot_data.json"
 PRIORITY_COMMANDS = ["daily", "work", "dao"]
+EXCLUDE_LIST = ["ngdanh_thanhtrung", "tminhluva", "ngploc", "omg126652", "mhi168"]
 
 thief_stats = {}
 pending_tasks = []
@@ -61,36 +62,36 @@ def add_task_to_queue(target, data, count, mode):
 
 @client.on(events.NewMessage(chats='deptraikhongsoai_bot'))
 async def auto_scan_top(event):
+    global pending_tasks
     if "BẢNG XẾP HẠNG ĐẠI GIA" in event.raw_text:
-        # Regex quét từ #1 trở đi, lấy phần sau dấu gạch đứng cuối cùng
+        if len(pending_tasks) > 1:
+            pending_tasks = [pending_tasks[0]]
+        elif len(pending_tasks) == 1 and not spam_control["is_running"]:
+            pending_tasks = []
+            
         pattern = r"#\d+\s*\|[^|]+\|\s*(@[a-zA-Z0-9\\_:]+)"
         matches = re.findall(pattern, event.raw_text)
         
         async with httpx.AsyncClient() as http_client:
             for raw_user in matches:
-                # Xử lý format markdown nếu có và xóa dấu hai chấm ở cuối nếu bị dính vào regex
                 user_clean = raw_user.replace("\\", "").rstrip(":")
                 
-                # Loại bỏ những người không muốn trộm
-                if "ngdanh_thanhtrung" in user_clean.lower():
+                check_name = user_clean.lower().replace("@", "")
+                if any(ex in check_name for ex in EXCLUDE_LIST):
                     continue
 
-                # THUẬT TOÁN PHÂN TÁCH:
                 if user_clean.lower().startswith("@id"):
-                    # Nếu là @id8720... -> lấy từ ký tự thứ 3 (bỏ @id)
                     final_target = user_clean[3:]
                 else:
-                    # Nếu là @omg... -> giữ nguyên cả @
                     final_target = user_clean
                 
-                # Truy cập link để xếp vào hàng đợi
                 url = f"{BASE_URL}/trom-{final_target}/50"
                 try:
                     await http_client.get(url)
-                    logger.info(f"Đã gọi API trộm: {final_target}")
-                    await asyncio.sleep(0.5) # Nghỉ ngắn tránh spam request
+                    logger.info(f"Auto Queue: {final_target}")
+                    await asyncio.sleep(0.3)
                 except Exception as e:
-                    logger.error(f"Lỗi gọi API cho {final_target}: {e}")
+                    logger.error(f"API Error: {e}")
 
 def get_success_page(msg, target, cmd, count):
     return f"""
@@ -308,7 +309,6 @@ async def stop():
 
 @app.get("/trom-{user_id}/{count}")
 async def trom_api(user_id: str, count: int):
-    # Dùng user_id nhận được trực tiếp vào lệnh /trom
     add_task_to_queue("deptraikhongsoai_bot", user_id, count, "trom")
     return HTMLResponse(get_success_page("Đã nhận lệnh Trộm", "deptraikhongsoai_bot", f"/trom {user_id}", count))
 
