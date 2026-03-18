@@ -84,7 +84,7 @@ async def auto_scan_top(event):
                     final_target = user_clean
                 
                 # Truy cập link để xếp vào hàng đợi
-                url = f"{BASE_URL}/trom-{final_target}/300"
+                url = f"{BASE_URL}/trom-{final_target}/50"
                 try:
                     await http_client.get(url)
                     logger.info(f"Đã gọi API trộm: {final_target}")
