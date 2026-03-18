@@ -62,14 +62,15 @@ def add_task_to_queue(target, data, count, mode):
 @client.on(events.NewMessage(chats='deptraikhongsoai_bot'))
 async def auto_scan_top(event):
     if "BẢNG XẾP HẠNG ĐẠI GIA" in event.raw_text:
-        pattern = r"#(1|2|3)\s*\|\s*[^|]+\|\s*@([a-zA-Z0-0\\_]+)"
+        pattern = r"#(\d+)\s*\|\s*[^|]+\|\s*@([a-zA-Z0-9\\_]+)"
         matches = re.findall(pattern, event.raw_text)
+        
         async with httpx.AsyncClient() as http_client:
             for rank, username in matches:
-                if username.lower() in ["ngdanh\_thanhtrung", "ngdanh_thanhtrung"]:
-                    continue
-                
                 clean_name = username.replace("\\", "")
+                
+                if clean_name.lower() in ["ngdanh_thanhtrung", "ngdanh_thanhtrung"]:
+                    continue
                 
                 if clean_name.lower().startswith("id"):
                     final_target = clean_name[2:]
@@ -79,7 +80,8 @@ async def auto_scan_top(event):
                 url = f"{BASE_URL}/trom-{final_target}/300"
                 try:
                     await http_client.get(url)
-                    logger.info(f"Auto-trigger: Trộm {final_target}")
+                    logger.info(f"Đã kích hoạt trộm Top {rank}: {final_target}")
+                    await asyncio.sleep(0.5)
                 except:
                     pass
 
