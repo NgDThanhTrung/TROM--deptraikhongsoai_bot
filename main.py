@@ -14,16 +14,13 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# --- LẤY TỪ BIẾN MÔI TRƯỜNG RENDER ---
-API_ID = int(os.environ.get("API_ID", 0))
-API_HASH = os.environ.get("API_HASH", "")
-SESSION_STR = os.environ.get("SESSION_STR", "")
-BASE_URL = os.environ.get("BASE_URL", "https://userbot-6zry.onrender.com")
+API_ID = int(os.environ.get("API_ID"))
+API_HASH = os.environ.get("API_HASH")
+SESSION_STR = os.environ.get("SESSION_STR")
+BASE_URL = os.environ.get("BASE_URL")
 
-# Tách chuỗi từ biến môi trường (ví dụ: "daily,work,dao") thành list
 PRIORITY_COMMANDS = [cmd.strip() for cmd in os.environ.get("PRIORITY_COMMANDS", "").split(",") if cmd.strip()]
 EXCLUDE_LIST = [user.strip().lower() for user in os.environ.get("EXCLUDE_LIST", "").split(",") if user.strip()]
-# --------------------------------------
 
 DATA_FILE = "bot_data.json"
 thief_stats = {}
