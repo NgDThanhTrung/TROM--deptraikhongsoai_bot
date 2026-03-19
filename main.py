@@ -14,16 +14,18 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+# --- LẤY TỪ BIẾN MÔI TRƯỜNG RENDER ---
 API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
 SESSION_STR = os.environ.get("SESSION_STR", "")
-BASE_URL = "https://userbot-6zry.onrender.com"
+BASE_URL = os.environ.get("BASE_URL", "https://userbot-6zry.onrender.com")
+
+# Tách chuỗi từ biến môi trường (ví dụ: "daily,work,dao") thành list
+PRIORITY_COMMANDS = [cmd.strip() for cmd in os.environ.get("PRIORITY_COMMANDS", "").split(",") if cmd.strip()]
+EXCLUDE_LIST = [user.strip().lower() for user in os.environ.get("EXCLUDE_LIST", "").split(",") if user.strip()]
+# --------------------------------------
 
 DATA_FILE = "bot_data.json"
-PRIORITY_COMMANDS = ["daily", "work", "dao"]
-# Danh sách những người không trộm (viết thường)
-EXCLUDE_LIST = ["ngdanh_thanhtrung", "tminhluva", "ngploc", "omg126652", "mhi168"]
-
 thief_stats = {}
 pending_tasks = []
 spam_control = {"is_running": False, "stop_flag": False, "current_task": "Đang rảnh"}
@@ -65,46 +67,36 @@ def add_task_to_queue(target, data, count, mode):
 async def auto_scan_top(event):
     global pending_tasks
     if "BẢNG XẾP HẠNG ĐẠI GIA" in event.raw_text:
-        # Khi có bảng mới, xóa bớt các lệnh trộm cũ để ưu tiên danh sách mới
-        if len(pending_tasks) > 1:
-            pending_tasks = [pending_tasks[0]] if spam_control["is_running"] else []
-
+        if not spam_control["is_running"]:
+            pending_tasks = []
+        else:
+            pending_tasks = [pending_tasks[0]]
+            
         pattern = r"#\d+\s*\|[^|]+\|\s*(@[a-zA-Z0-9\\_:]+)"
         matches = re.findall(pattern, event.raw_text)
+        top_3 = matches[:3]
         
         async with httpx.AsyncClient() as http_client:
-            for raw_user in matches:
+            for raw_user in top_3:
                 user_clean = raw_user.replace("\\", "").rstrip(":")
                 check_name = user_clean.lower().replace("@", "")
                 
-                # Bỏ qua nếu nằm trong danh sách đen
                 if any(ex in check_name for ex in EXCLUDE_LIST):
                     continue
 
-                # Thuật toán tách ID hoặc giữ nguyên Username
-                if user_clean.lower().startswith("@id"):
-                    final_target = user_clean[3:]
-                else:
-                    final_target = user_clean
-                
-                # TRUY CẬP TRỰC TIẾP VÀO LINK CHỈ ĐỊNH
+                final_target = user_clean[3:] if user_clean.lower().startswith("@id") else user_clean
                 url = f"{BASE_URL}/trom-{final_target}/50"
                 try:
                     await http_client.get(url, timeout=10.0)
-                    logger.info(f"Đã kích hoạt truy cập: {url}")
-                    await asyncio.sleep(0.6) # Tránh dồn request quá nhanh
+                    logger.info(f"Triggered URL: {url}")
+                    await asyncio.sleep(0.6) 
                 except Exception as e:
-                    logger.error(f"Lỗi truy cập {url}: {e}")
+                    logger.error(f"Error triggering {url}: {e}")
 
 def get_success_page(msg, target, cmd, count):
     return f"""
     <html>
-        <head>
-            <title>Lệnh đã nhận</title>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <script src="https://cdn.tailwindcss.com"></script>
-        </head>
+        <head><title>Lệnh đã nhận</title><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.tailwindcss.com"></script></head>
         <body class="bg-slate-900 flex items-center justify-center min-h-screen p-6">
             <div class="max-w-md w-full bg-white rounded-3xl p-8 shadow-2xl text-center">
                 <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -134,9 +126,7 @@ def get_html_template(title, content, request: Request = None):
     return f"""
     <html>
         <head>
-            <title>{title}</title>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>{title}</title><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
             <script src="https://cdn.tailwindcss.com"></script>
             <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
             <style>
