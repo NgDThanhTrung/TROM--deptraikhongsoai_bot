@@ -1,4 +1,5 @@
 # 🤖 Telegram UserBot: Web-to-Telegram Automation — Edition 2026
+
 ### 🛠 Phát triển bởi: [NgDanhThanhTrung](https://github.com/NgDanhThanhTrung)
 
 ![Tác giả](https://img.shields.io/badge/Author-NgDanhThanhTrung-blue?style=for-the-badge&logo=telegram)
@@ -29,6 +30,27 @@ Dự án này là một giải pháp tự động hóa đột phá được nghi
 
 ---
 
+## 🔑 Hướng dẫn lấy StringSession (QUAN TRỌNG)
+Để chạy UserBot trên các nền tảng Cloud (như Render) mà không cần giữ file `.session` vật lý, bạn bắt buộc phải có chuỗi `SESSION_STR`.
+
+1. **Lấy API ID & Hash**: Truy cập [my.telegram.org](https://my.telegram.org), đăng nhập và tạo App để lấy `api_id` và `api_hash`.
+2. **Chạy Script tạo Session**: Sử dụng Python trên máy tính cá nhân (đã cài `pip install telethon`):
+   ```python
+   from telethon.sync import TelegramClient
+   from telethon.sessions import StringSession
+
+   # Điền thông tin lấy từ my.telegram.org vào đây
+   API_ID = 1234567 
+   API_HASH = 'abcdef123456gh'
+
+   with TelegramClient(StringSession(), API_ID, API_HASH) as client:
+       print("Chuỗi Session của bạn là (Hãy copy đoạn bên dưới):")
+       print(client.session.save())
+   ```
+3. **Bảo mật**: Chuỗi này đại diện cho toàn quyền truy cập tài khoản Telegram của bạn. **Tuyệt đối không gửi cho người lạ hoặc để lộ công khai.**
+
+---
+
 ## 📖 Cách Sử Dụng (API Endpoints)
 
 ### 1. Quản Lý Hệ Thống & Thống Kê
@@ -53,11 +75,16 @@ Tự động thực hiện: **Gửi `/trom {ID}`** ➜ Nghỉ 1s ➜ **Gửi `/m
 
 ---
 
-## 🛠 Hướng Dẫn Triển Khai
+## 🛠 Hướng Dẫn Triển Khai (Render.com)
 
-1. **GitHub**: Upload `main.py` và `requirements.txt` vào Repository (nên để Private).
-2. **Render**: Kết nối GitHub, thiết lập Environment Variables: `API_ID`, `API_HASH`, `SESSION_STR`.
-3. **Keep-Alive**: Dùng [cron-job.org](https://cron-job.org) gọi vào địa chỉ `/health` mỗi 5 phút để Render không bị "ngủ".
+1. **GitHub**: Upload `main.py` và `requirements.txt` vào Repository (nên để chế độ **Private**).
+2. **Render**: 
+   * Tạo **Web Service** mới, kết nối với Repo GitHub.
+   * Thiết lập **Environment Variables**:
+     - `API_ID`: Lấy từ Telegram.
+     - `API_HASH`: Lấy từ Telegram.
+     - `SESSION_STR`: Chuỗi phiên đăng nhập (StringSession) vừa tạo.
+3. **Keep-Alive**: Dùng [cron-job.org](https://cron-job.org) gọi vào địa chỉ `https://{ten-app}.onrender.com/health` mỗi 5 phút để Render không bị tắt dịch vụ (Sleep mode).
 
 ---
 
@@ -69,6 +96,6 @@ Tự động thực hiện: **Gửi `/trom {ID}`** ➜ Nghỉ 1s ➜ **Gửi `/m
 
 ## 📜 Điều Khoản Sử Dụng
 © 2026 **NgDanhThanhTrung**. Bảo lưu mọi quyền.
-1. Tuyệt đối không xóa/chỉnh sửa thông tin bản quyền của tác giả.
+1. Tuyệt đối không xóa hoặc chỉnh sửa thông tin bản quyền của tác giả.
 2. Không sử dụng mã nguồn cho hành vi vi phạm chính sách của Telegram.
-3. Tác giả không chịu trách nhiệm về bất kỳ rủi ro nào phát sinh.
+3. Tác giả không chịu trách nhiệm về bất kỳ rủi ro nào (khóa tài khoản, mất tài sản game...) phát sinh trong quá trình sử dụng.
